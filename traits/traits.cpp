@@ -79,7 +79,7 @@ void test()
 
 
 namespace test4 {
-template <bool b>
+template <bool>
 struct algorithm_selector {
 	template< typename T>
 	static void implementation(T& object) {
@@ -139,54 +139,118 @@ namespace test5 {
 
 template <typename T>
 struct is_swapable {
-	static const bool value = std::is_integral<T>::value && sizeof(T) >= 2;
+	static const bool value = std::is_integral<T>::value && (sizeof(T) >= 2);
 };
 
 template <typename T>
 T byte_swap(T value) {
-	std::assert(is_swapable<T>::value && "Cannot swap values of this type");
-	unsigned char *bytes = reinterpret_cast< unsigned char * >(&value);
-	for (size_t i = 0; i < sizeof(T); i += 2) {
-		// Take the value on the left and switch it 
-		// with the value on the right
-		unsigned char v = bytes[i];
-		bytes[i] = bytes[i + 1];
-		bytes[i + 1] = v;
+	if (is_swapable<T>::value) {
+		unsigned char *bytes = reinterpret_cast<unsigned char *>(&value);
+		for (size_t i = 0; i < sizeof(T); i += 2) {
+			// Take the value on the left and switch it 
+			// with the value on the right
+			unsigned char v = bytes[i];
+			bytes[i] = bytes[i + 1];
+			bytes[i + 1] = v;
+		}
 	}
 	return value;
+}
+
+template <bool>
+struct gen_random_number_selector {
+	template <typename T>
+	static T gen(std::mt19937& rng) {
+		return T();
+	}
+};
+
+template <>
+struct gen_random_number_selector<true> {
+	template <typename T>
+	static T gen(std::mt19937& rng) {
+		std::uniform_real_distribution<T> dist(std::numeric_limits<T>::min(), std::numeric_limits<T>::max());
+		return dist(rng);
+	}
+};
+
+template <>
+struct gen_random_number_selector<false> {
+	template <typename T>
+	static T gen(std::mt19937& rng) {
+		std::uniform_int_distribution<T> dist(std::numeric_limits<T>::min(), std::numeric_limits<T>::max());
+		return dist(rng);
+	}
+};
+
+template <typename T>
+T gen_random_number(std::mt19937& rng) {
+	return gen_random_number_selector<std::is_floating_point<T>::value>::gen<T>(rng);
+}
+
+template <>
+bool gen_random_number(std::mt19937& rng) {
+	std::bernoulli_distribution dist;
+	return dist(rng);
+}
+
+template <>
+char gen_random_number(std::mt19937& rng) {
+	std::uniform_int_distribution<int> dist(-128, 127);
+	return static_cast<char>(dist(rng));
+}
+
+template <>
+unsigned char gen_random_number(std::mt19937& rng) {
+	std::uniform_int_distribution<int> dist(0, 255);
+	return static_cast<unsigned char>(dist(rng));
 }
 
 template <typename T>
 void test_impl(std::mt19937& rng)
 {
-	std::cout << "is_swapable " << typeid(T).name() << " :" << is_swapable<T>::value << std::endl;
-	std::uniform_int_distribution<T> dist(std::numeric_limits<T>::min(), std::numeric_limits<T>::max());
-	std::cout << "calling is_swapable for " << dist(rng) << std::endl;
+	std::cout << "is_swapable " << typeid(T).name() << ":" << std::boolalpha << is_swapable<T>::value << std::endl;
+	//T val = gen_random_number<T>(rng);
+	//std::cout << "calling is_swapable for " << val << std::endl;
+	//std::cout << "result is " << byte_swap(val) << std::endl;
 }
 
 void test()
 {
 	std::cout << "--------------------------test5--------------------------" << std::endl;
-	std::cout << "is_swapable char " << is_swapable<char>::value << std::endl;
+	/*std::cout << "is_swapable char " << is_swapable<char>::value << std::endl;
 	std::cout << "is_swapable short " << is_swapable<short>::value << std::endl;
 	std::cout << "is_swapable unsigned  " << is_swapable<unsigned char>::value << std::endl;
 	std::cout << "is_swapable unsigned short " << is_swapable<unsigned short>::value << std::endl;
 	std::cout << "is_swapable double " << is_swapable<double>::value << std::endl;
 	std::cout << "is_swapable long " << is_swapable<long>::value << std::endl;
 	std::cout << "is_swapable float " << is_swapable<float>::value << std::endl;
-	std::cout << "is_swapable double " << is_swapable<double>::value << std::endl;
+	std::cout << "is_swapable double " << is_swapable<double>::value << std::endl;*/
 
-	struct s {
+	std::mt19937 rng;
+	test_impl<bool>(rng);
+	test_impl<char>(rng);
+	test_impl<unsigned char>(rng);
+	test_impl<short>(rng);
+	test_impl<unsigned short>(rng);
+	test_impl<float>(rng);
+	test_impl<double>(rng);
+	test_impl<long>(rng);
+	
+
+	/////////////////////wont work///////////////////
+	struct st {
 		int hi : 24;
 		int lo : 8;
 	};
 
-	s s;
+	st s;
 	s.hi = 65535;
 	s.lo = 255;
 
-	std::cout << "is_swapable s.hi " << is_swapable<decltype(s.hi)>::value << std::endl;
-	std::cout << "is_swapable s.lo " << is_swapable<decltype(s.lo)>::value << std::endl;
+	test_impl<decltype(s.hi)>(rng);
+	test_impl<decltype(s.lo)>(rng);
+	/////////////////////wont work///////////////////
 }
 
 }
